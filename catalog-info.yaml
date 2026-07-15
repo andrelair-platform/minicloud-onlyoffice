@@ -1,0 +1,30 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: minicloud-onlyoffice
+  description: |
+    Level 2 custom OnlyOffice DocumentServer image — extends onlyoffice/documentserver:8.3.3
+    with the minicloud CA certificate baked in and NODE_EXTRA_CA_CERTS set, enabling
+    Node.js-based components to trust minicloud TLS endpoints (required for Nextcloud
+    integration over internal HTTPS).
+  annotations:
+    backstage.io/source-location: url:https://github.com/andrelair-platform/minicloud-onlyoffice
+    github.com/project-slug: andrelair-platform/minicloud-onlyoffice
+    argocd/app-name: nextcloud
+    backstage.io/kubernetes-id: onlyoffice
+  tags:
+    - docker
+    - onlyoffice
+    - nextcloud
+    - level2
+    - phase-58
+  links:
+    - url: https://cloud.devandre.sbs
+      title: Nextcloud (document editing)
+      icon: web
+spec:
+  type: service
+  lifecycle: production
+  owner: group:default/andrelair-platform
+  system: minicloud-platform
