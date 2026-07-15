@@ -2,10 +2,11 @@ FROM onlyoffice/documentserver:8.3.3
 
 USER root
 
-# Add minicloud self-signed CA so the document services can reach Nextcloud
-# via HTTPS (cloud.devandre.sbs / cloud.10.0.0.200.nip.io) without errors.
-COPY certs/minicloud-ca.crt /usr/local/share/ca-certificates/minicloud-ca.crt
-RUN update-ca-certificates
+# CA cert injected at build time via --build-arg (CI passes MINICLOUD_CA_CERT secret).
+# Never committed to the repo — internal infrastructure detail.
+ARG CA_CERT
+RUN echo "${CA_CERT}" > /usr/local/share/ca-certificates/minicloud-ca.crt \
+    && update-ca-certificates
 
 # Node.js ignores the OS trust store — point it at our CA explicitly so
 # ds:docservice and ds:converter can verify TLS when fetching/saving documents.

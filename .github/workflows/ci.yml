@@ -75,6 +75,8 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' }}
           tags: ${{ env.HARBOR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+          build-args: |
+            CA_CERT=${{ secrets.MINICLOUD_CA_CERT }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
