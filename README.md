@@ -18,7 +18,6 @@
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
-- [Project Structure](#project-structure)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
@@ -138,22 +137,6 @@ docker run -i -t -d -p 80:80 \
 ```
 
 Open [http://localhost](http://localhost) — you should see the DocumentServer welcome page.
-
----
-
-## Project Structure
-
-```
-minicloud-onlyoffice/
-├── Dockerfile              # Single-stage build: security patches + CA injection
-├── catalog-info.yaml       # Backstage catalog entity (Component, phase-58)
-├── .github/
-│   └── workflows/
-│       └── ci.yml          # Build → push → Trivy scan → cosign sign → SBOM → gitops bump
-└── .gitignore              # certs/ excluded — CA cert must never be committed
-```
-
-The repo is intentionally minimal. OnlyOffice is a large, self-contained application — the only purpose of this repo is to layer the minicloud CA and security patches on top of the upstream image.
 
 ---
 
