@@ -2,7 +2,9 @@ FROM onlyoffice/documentserver:8.3.3
 
 USER root
 
-RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
+RUN apt-mark hold msodbcsql18 msodbcsql17 2>/dev/null || true && \
+    apt-get update && apt-get upgrade -y --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
 
 # CA cert injected at build time via --build-arg (CI passes MINICLOUD_CA_CERT secret).
 # Never committed to the repo — internal infrastructure detail.
