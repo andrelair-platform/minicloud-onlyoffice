@@ -158,6 +158,7 @@ jobs:
           URL="https://${{ env.REGISTRY }}/v2/${{ env.IMAGE_NAME }}/manifests/${TAG}"
           STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
             --cacert /usr/local/share/ca-certificates/minicloud-ca.crt \
+            -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json" \
             -H "Authorization: Basic $(echo -n '${{ secrets.HARBOR_USER }}:${{ secrets.HARBOR_PASSWORD }}' | base64)" \
             "$URL")
           if [ "$STATUS" != "200" ]; then
