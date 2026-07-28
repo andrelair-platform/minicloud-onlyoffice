@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+
+  "timezone": "Europe/Paris",
+  "schedule": ["every weekend"],
+  "labels": ["dependencies", "renovate"],
+  "assignees": ["AndreLiar"],
+  "prConcurrentLimit": 2,
+  "commitMessagePrefix": "chore(deps):",
+
+  "enabledManagers": ["dockerfile"],
+
+  "packageRules": [
+    {
+      "description": "OnlyOffice documentserver minor/patch — CA cert injection must be re-verified",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "base images",
+      "labels": ["dependencies", "renovate", "check-ca-cert"],
+      "automerge": false
+    },
+    {
+      "description": "OnlyOffice major — Node.js version inside image may change, CA cert path differs",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["major"],
+      "labels": ["dependencies", "renovate", "major", "manual-review-required"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}
