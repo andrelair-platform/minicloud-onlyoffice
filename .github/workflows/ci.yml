@@ -172,9 +172,10 @@ jobs:
           fi
           echo "Image $TAG confirmed in Harbor (HTTP $STATUS)"
 
-      - name: Bump image tag in onlyoffice manifest
+      - name: Bump image tag in onlyoffice manifest (via PR)
         env:
           NEW_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
         run: |
           sed -i "s|image: .*onlyoffice.*|image: harbor.10.0.0.200.nip.io/library/onlyoffice:${NEW_TAG}|" \
             manifests/nextcloud/10-onlyoffice.yaml
@@ -183,5 +184,13 @@ jobs:
             echo "No change — already at ${NEW_TAG}"
             exit 0
           fi
+          # gitops main is branch-protected — direct push is rejected (GH013). Open a
+          # PR and auto-merge it instead (this is why builds silently stopped bumping).
+          BRANCH="ci/onlyoffice-${NEW_TAG}"
+          git checkout -b "$BRANCH"
           git commit -S -m "ci(onlyoffice): bump image to ${NEW_TAG}"
-          git push
+          git push origin "$BRANCH"
+          gh pr create --repo "${{ env.GITOPS_REPO }}" --base main --head "$BRANCH" \
+            --title "ci(onlyoffice): bump image to ${NEW_TAG}" \
+            --body "Automated image bump from onlyoffice CI run ${{ github.run_id }}."
+          gh pr merge "$BRANCH" --repo "${{ env.GITOPS_REPO }}" --squash --admin --delete-branch
