@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/andrelair-platform/minicloud-onlyoffice/compare/minicloud-onlyoffice-v0.1.1...minicloud-onlyoffice-v0.1.2) (2026-08-28)
+
+
+### Bug Fixes
+
+* **website:** correct sidebars.ts brace syntax ([3052c10](https://github.com/andrelair-platform/minicloud-onlyoffice/commit/3052c103580ede2698cc1fa6ebbf507389bc011d))
+
 ## [0.1.1](https://github.com/andrelair-platform/minicloud-onlyoffice/compare/minicloud-onlyoffice-v0.1.0...minicloud-onlyoffice-v0.1.1) (2026-08-14)
 
 
