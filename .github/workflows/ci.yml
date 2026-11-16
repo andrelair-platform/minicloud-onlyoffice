@@ -1,15 +1,18 @@
 name: CI
 
+# ghcr-only (Harbor decommissioned 2026-11-16). Builds the custom image to ghcr + cosign/SBOM.
+# Login uses GITOPS_TOKEN (write:packages) because the package is linked to minicloud-gitops
+# (crane-copied during the decommission) and the repo-scoped GITHUB_TOKEN can't write it.
+# The old Harbor auto-bump is dropped — it sed'd manifests/ paths that LOT E moved to platform/+is/
+# (dead since 2026-10); these images are manually pinned in gitops.
 on:
   push:
-    branches: [main, staging, dev]
+    branches: [main]
   pull_request:
-    branches: [main, staging]
+    branches: [main]
 
 env:
-  REGISTRY: harbor.10.0.0.200.nip.io
-  IMAGE_NAME: library/onlyoffice
-  GITOPS_REPO: andrelair-platform/minicloud-gitops
+  GHCR_IMAGE: ghcr.io/andrelair-platform/onlyoffice
 
 jobs:
   build-and-push:
@@ -17,18 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
       id-token: write
-    outputs:
-      image_tag: ${{ steps.meta.outputs.image_tag }}
-      digest: ${{ steps.build.outputs.digest }}
-      branch: ${{ steps.meta.outputs.branch }}
-
     steps:
-      - name: Free runner disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
-          df -h
-
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -37,52 +31,25 @@ jobs:
         id: meta
         run: |
           SHA=$(git rev-parse --short HEAD)
-          BRANCH=${GITHUB_REF_NAME}
-          if [ "$BRANCH" = "main" ]; then
-            TAG="${SHA}-amd64"
-          else
-            TAG="${BRANCH}-${SHA}-amd64"
-          fi
-          echo "image_tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${SHA}-amd64" >> "$GITHUB_OUTPUT"
 
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4.1.3
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-
-      - name: Trust minicloud CA
-        run: |
-          sudo mkdir -p /etc/docker/certs.d/${{ env.REGISTRY }}
-          echo "${{ secrets.MINICLOUD_CA_CERT }}" \
-            | sudo tee /etc/docker/certs.d/${{ env.REGISTRY }}/ca.crt
-          echo "${{ secrets.MINICLOUD_CA_CERT }}" \
-            | sudo tee /usr/local/share/ca-certificates/minicloud-ca.crt
-          sudo update-ca-certificates
-
-      - name: Login to Harbor
+      - name: Login to GHCR
         uses: docker/login-action@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HARBOR_USER }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
+          registry: ghcr.io
+          username: AndreLiar
+          password: ${{ secrets.GITOPS_TOKEN }}
 
       - uses: docker/setup-buildx-action@v4
-        with:
-          buildkitd-config-inline: |
-            [registry."harbor.10.0.0.200.nip.io"]
-              insecure = true
 
-      - name: Build and push to Harbor
+      - name: Build and push to ghcr
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
           platforms: linux/amd64
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.image_tag }}
+          tags: ${{ env.GHCR_IMAGE }}:${{ steps.meta.outputs.image_tag }}
           build-args: |
             CA_CERT=${{ secrets.MINICLOUD_CA_CERT }}
           cache-from: type=gha
@@ -91,7 +58,7 @@ jobs:
       - name: Scan image for vulnerabilities (Trivy)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }}
           format: table
           exit-code: '1'
           severity: CRITICAL
@@ -99,98 +66,11 @@ jobs:
           timeout: 15m
 
       - name: Install Cosign
-        if: github.ref_name != 'dev'
         uses: sigstore/cosign-installer@v3
-
       - name: Install syft
-        if: github.ref_name == 'main'
         uses: anchore/sbom-action/download-syft@v0
-
-      - name: Generate SBOM (CycloneDX JSON)
-        if: github.ref_name == 'main'
+      - name: Sign image + attach SBOM (keyless)
         run: |
-          syft ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} \
-            -o cyclonedx-json=sbom.json
-
-      - name: Sign image
-        if: github.ref_name != 'dev'
-        run: |
-          cosign sign --yes \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-
-      - name: Attach SBOM to image as OCI referrer
-        if: github.ref_name == 'main'
-        run: |
-          cosign attach sbom \
-            --sbom sbom.json \
-            --type cyclonedx \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-
-  bump-gitops:
-    needs: build-and-push
-    if: needs.build-and-push.outputs.branch == 'main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4.1.3
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-
-      - name: Trust minicloud CA
-        run: |
-          echo "${{ secrets.MINICLOUD_CA_CERT }}" \
-            | sudo tee /usr/local/share/ca-certificates/minicloud-ca.crt
-          sudo update-ca-certificates
-
-      - name: Checkout minicloud-gitops
-        uses: actions/checkout@v7
-        with:
-          repository: ${{ env.GITOPS_REPO }}
-          token: ${{ secrets.GITOPS_TOKEN }}
-
-      - name: Import GPG signing key
-        uses: crazy-max/ghaction-import-gpg@v7
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          git_user_signingkey: true
-          git_commit_gpgsign: true
-
-      - name: Verify image exists in Harbor before gitops bump
-        run: |
-          TAG="${{ needs.build-and-push.outputs.image_tag }}"
-          URL="https://${{ env.REGISTRY }}/v2/${{ env.IMAGE_NAME }}/manifests/${TAG}"
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
-            --cacert /usr/local/share/ca-certificates/minicloud-ca.crt \
-            -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json" \
-            -H "Authorization: Basic $(echo -n '${{ secrets.HARBOR_USER }}:${{ secrets.HARBOR_PASSWORD }}' | base64)" \
-            "$URL")
-          if [ "$STATUS" != "200" ]; then
-            echo "Image $TAG not found in Harbor (HTTP $STATUS) — aborting gitops bump"
-            exit 1
-          fi
-          echo "Image $TAG confirmed in Harbor (HTTP $STATUS)"
-
-      - name: Bump image tag in onlyoffice manifest (via PR)
-        env:
-          NEW_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-          GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
-        run: |
-          sed -i "s|image: .*onlyoffice.*|image: harbor.10.0.0.200.nip.io/library/onlyoffice:${NEW_TAG}|" \
-            manifests/nextcloud/10-onlyoffice.yaml
-          git add manifests/nextcloud/10-onlyoffice.yaml
-          if git diff --cached --quiet; then
-            echo "No change — already at ${NEW_TAG}"
-            exit 0
-          fi
-          # gitops main is branch-protected — direct push is rejected (GH013). Open a
-          # PR and auto-merge it instead (this is why builds silently stopped bumping).
-          BRANCH="ci/onlyoffice-${NEW_TAG}"
-          git checkout -b "$BRANCH"
-          git commit -S -m "ci(onlyoffice): bump image to ${NEW_TAG}"
-          git push origin "$BRANCH"
-          gh pr create --repo "${{ env.GITOPS_REPO }}" --base main --head "$BRANCH" \
-            --title "ci(onlyoffice): bump image to ${NEW_TAG}" \
-            --body "Automated image bump from onlyoffice CI run ${{ github.run_id }}."
-          gh pr merge "$BRANCH" --repo "${{ env.GITOPS_REPO }}" --squash --admin --delete-branch
+          cosign sign --yes "${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }}"
+          syft "${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }}" -o cyclonedx-json=sbom.json
+          cosign attach sbom --sbom sbom.json --type cyclonedx "${{ env.GHCR_IMAGE }}@${{ steps.build.outputs.digest }}"
